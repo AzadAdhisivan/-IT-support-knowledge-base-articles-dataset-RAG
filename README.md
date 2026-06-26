@@ -1,41 +1,61 @@
-# IT Support Knowledge Base RAG System
+# RAG Builder
 
-A Retrieval-Augmented Generation (RAG) pipeline that answers IT support questions by retrieving relevant knowledge articles and generating accurate answers using a local LLM.
+A flexible, end-to-end Retrieval-Augmented Generation (RAG) system that works with **any CSV file**. Upload a CSV, select your text columns, and ask questions — powered by a fully local LLM with no API keys required.
 
 ## Project Overview
 
-This project builds an end-to-end RAG system on a synthetic IT support knowledge base dataset. Each topic in the dataset contains three versions of an article — a good article, an alternative good article, and an intentionally bad article — making it suitable for RAG evaluation.
+This project builds a complete RAG pipeline with a Streamlit UI. It supports any CSV dataset, automatically detects text columns, cleans the data, embeds it into a FAISS vector store, and uses a local LLM via Ollama to generate grounded answers with evaluation scoring.
 
 ## Pipeline
-CSV Dataset
+CSV Upload (Streamlit UI)
 
 ↓
 
-chunking.py       → splits articles into overlapping chunks
+cleaner.py        → drops null rows and duplicates
 
 ↓
 
-vectorstore.py    → embeds chunks and stores in FAISS
+chunking.py       → splits text into overlapping chunks
+
+↓
+
+vectorstore.py    → embeds chunks using bge-small-en-v1.5 → stores in FAISS
 
 ↓
 
 rag.py            → retrieves top 3 relevant chunks → Llama 3.2 generates answer
 
+↓
+
+evaluate.py       → scores answer relevance via keyword matching
 
 ## Tech Stack
 
 | Component | Tool |
 |---|---|
+| UI | Streamlit |
 | Chunking | LangChain RecursiveCharacterTextSplitter |
 | Embedding Model | BAAI/bge-small-en-v1.5 |
 | Vector Store | FAISS |
 | LLM | Llama 3.2 1B via Ollama (local) |
 | Framework | LangChain |
 
+## Features
+
+- Upload any CSV file through the UI
+- Auto-detects text and numeric columns
+- Select multiple text columns to embed
+- Select metadata columns for source attribution
+- CSV cleaning before chunking (null rows, duplicates)
+- GPU or CPU selection for embedding
+- Answer relevance evaluation with keyword scoring
+- Source document viewer per answer
+
 ## Prerequisites
 
 - Python 3.9+
 - [Ollama](https://ollama.com/download) installed
+- Nvidia GPU recommended for large CSVs (optional)
 
 ## Setup
 
@@ -76,42 +96,38 @@ ollama pull llama3.2:1b
 
 ## Usage
 
-**Step 1 — Chunk the dataset**
+**Run the Streamlit app**
 
 ```bash
-python chunking.py
+streamlit run app.py
 ```
 
-**Step 2 — Build the FAISS vector store**
-
-```bash
-python vectorstore.py
-```
-
-This embeds all chunks and saves the FAISS index to `faiss_index/` locally. Only needs to be run once.
-
-**Step 3 — Run the RAG pipeline**
-
-```bash
-python rag.py
-```
-
-Edit the `query` variable in `rag.py` to ask any IT support question.
+Then in the UI:
+1. Upload your CSV file
+2. Select which text columns to embed
+3. Optionally select metadata columns
+4. Choose CPU or GPU for embedding
+5. Click **Build Vector Store**
+6. Type your question and click **Ask**
 
 ## Project Structure
 RAG BUILDER/
 
 │
 
-├── synthetic_knowledge_items.csv  # IT support knowledge base dataset
+├── app.py               # Streamlit UI — main entry point
 
-├── chunking.py                    # Loads CSV and splits into chunks
+├── cleaner.py           # CSV cleaning (nulls, duplicates)
 
-├── vectorstore.py                 # Embeds chunks and builds FAISS index
+├── chunking.py          # Splits documents into chunks
 
-├── rag.py                         # Retrieval + LLM answer generation
+├── vectorstore.py       # Embeds chunks and builds FAISS index
 
-├── requirements.txt               # Python dependencies
+├── rag.py               # Retrieval + LLM answer generation
+
+├── evaluate.py          # Answer relevance evaluation
+
+├── requirements.txt     # Python dependencies
 
 └── .gitignore
 
@@ -124,40 +140,42 @@ To reset your forgotten computer password, go to the Password Reset Tool
 website and click on Forgot Password. Enter your username or email address
 
 and follow the instructions sent to your registered email.
---- Sources Used ---
+--- Sources Retrieved ---
 
-Topic: Resetting a Forgotten Computer Password | Source: ki_text
+Source 1 — ki_text
 
-Topic: Resetting a Forgotten Computer Password | Source: alt_ki_text
+Source 2 — alt_ki_text
 
-Topic: Resetting a Forgotten Computer Password | Source: ki_text
+Source 3 — ki_text
+--- Evaluation ---
 
-## Dataset Structure
+Answer Relevance : PASS
 
-The CSV contains IT support articles with the following columns:
+Relevance Score  : 1.0
 
-| Column | Description |
-|---|---|
-| `ki_topic` | Topic of the article |
-| `ki_text` | High quality knowledge article |
-| `alt_ki_text` | Alternative well-written version |
-| `bad_ki_text` | Intentionally poorly written version |
+Keywords Checked : ['reset', 'password']
 
-The three versions per topic make this dataset suitable for evaluating RAG retrieval quality — specifically whether the system retrieves high quality articles over poorly written ones.
+Matched          : 2 / 2
 
 ## How It Works
 
-**1. Chunking**
-The CSV is loaded into LangChain Document objects with metadata (topic and source). Each document is split into chunks of 800 characters with 100 character overlap using RecursiveCharacterTextSplitter.
+**1. Cleaning**
+The uploaded CSV is cleaned before processing — rows with null values across all selected text columns are dropped, and duplicate rows are removed.
 
-**2. Embedding and Vector Store**
-Each chunk is converted into a 384-dimensional vector using the BAAI/bge-small-en-v1.5 embedding model. These vectors are stored in a FAISS index saved to disk.
+**2. Chunking**
+Text columns are loaded into LangChain Document objects with metadata. Each document is split into chunks of 800 characters with 100 character overlap using RecursiveCharacterTextSplitter.
 
-**3. Retrieval**
+**3. Embedding and Vector Store**
+Each chunk is converted into a 384-dimensional vector using the BAAI/bge-small-en-v1.5 embedding model. These vectors are stored in a FAISS index saved to disk. GPU acceleration is supported for faster embedding on large CSVs.
+
+**4. Retrieval**
 When a query is received, it is embedded using the same model. FAISS performs cosine similarity search and returns the top 3 most semantically similar chunks.
 
-**4. Generation**
-The retrieved chunks are passed as context to Llama 3.2 1B running locally via Ollama. The LLM generates a grounded answer based only on the retrieved context.
+**5. Generation**
+The retrieved chunks are passed as context to Llama 3.2 1B running locally via Ollama. The LLM generates a grounded answer based only on the retrieved context. If the answer is not in the context, it returns "I don't know."
+
+**6. Evaluation**
+Answer relevance is scored by extracting meaningful keywords from the query (excluding stop words and punctuation) and checking how many appear in the generated answer. A score of 0.5 or above is a PASS.
 
 ## Why Local LLM
 

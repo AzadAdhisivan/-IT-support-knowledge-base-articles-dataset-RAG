@@ -1,0 +1,4 @@
+__pycache__
+.venv
+faiss_index
+synthetic_knowledge_items.csv

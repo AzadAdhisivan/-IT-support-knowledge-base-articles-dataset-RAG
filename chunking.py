@@ -2,53 +2,28 @@ import pandas as pd
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-df = pd.read_csv("synthetic_knowledge_items.csv")
+def load_and_chunk(df, text_columns, metadata_columns=None, chunk_size=800, chunk_overlap=100):
+    docs = []
 
-docs = []
+    for col in text_columns:
+        if col not in df.columns:
+            continue
 
-for _, row in df.iterrows():
+        col_df = df[df[col].notna()][([col] + (metadata_columns or []))]
 
-    docs.append(
-        Document(
-            page_content=row["ki_text"],
-            metadata={
-                "topic": row["ki_topic"],
-                "source": "ki_text"
-            }
-        )
+        for _, row in col_df.iterrows():
+            metadata = {"source": col}
+            if metadata_columns:
+                metadata.update({m: row[m] for m in metadata_columns if m in df.columns})
+
+            docs.append(Document(
+                page_content=str(row[col]),
+                metadata=metadata
+            ))
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap
     )
 
-    docs.append(
-        Document(
-            page_content=row["alt_ki_text"],
-            metadata={
-                "topic": row["ki_topic"],
-                "source": "alt_ki_text"
-            }
-        )
-    )
-
-    docs.append(
-        Document(
-            page_content=row["bad_ki_text"],
-            metadata={
-                "topic": row["ki_topic"],
-                "source": "bad_ki_text"
-            }
-        )
-    )
-
-
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=800,
-    chunk_overlap=100
-)
-
-chunks = splitter.split_documents(docs)
-
-print(f"Total chunks: {len(chunks)}")
-
-for i, chunk in enumerate(chunks[:5]):
-    print(f"\n----- Chunk {i+1} -----")
-    print(chunk.page_content)
-    print("Metadata:", chunk.metadata)
+    return splitter.split_documents(docs)
